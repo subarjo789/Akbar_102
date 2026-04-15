@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Real-time Web Scraping Monitor</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        .header {
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            text-align: center;
+        }
+        
+        .header h1 {
+            color: #667eea;
+            margin-bottom: 10px;
+        }
+        
+        .status {
+            display: inline-block;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: bold;
+        }
+        
+        .status.connected {
+            background: #4CAF50;
+            color: white;
+        }
+        
+        .status.disconnected {
+            background: #f44336;
+            color: white;
+        }
+        
+        .stats {
+            display: flex;
+            justify-content: space-around;
+            margin-bottom: 20px;
+        }
+        
+        .stat-card {
+            background: white;
+            border-radius: 10px;
+            padding: 15px;
+            text-align: center;
+            flex: 1;
+            margin: 0 10px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+        
+        .stat-card h3 {
+            color: #667eea;
+            font-size: 14px;
+            margin-bottom: 10px;
+        }
+        
+        .stat-card .number {
+            font-size: 32px;
+            font-weight: bold;
+            color: #333;
+        }
+        
+        .data-container {
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            max-height: 500px;
+            overflow-y: auto;
+        }
+        
+        .data-container h2 {
+            color: #667eea;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #eee;
+        }
+        
+        .data-item {
+            background: #f8f9fa;
+            border-left: 4px solid #667eea;
+            padding: 12px;
+            margin-bottom: 10px;
+            border-radius: 8px;
+            transition: all 0.3s ease;
+        }
+        
+        .data-item:hover {
+            transform: translateX(5px);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        
+        .data-item.book { border-left-color: #4CAF50; }
+        .data-item.quote { border-left-color: #FF9800; }
+        .data-item.country { border-left-color: #2196F3; }
+        .data-item.start { border-left-color: #9C27B0; }
+        .data-item.complete { border-left-color: #00BCD4; }
+        
+        .timestamp {
+            font-size: 11px;
+            color: #999;
+            margin-bottom: 5px;
+        }
+        
+        .data-content {
+            font-size: 14px;
+            color: #333;
+        }
+        
+        .data-content strong {
+            color: #667eea;
+        }
+        
+        .controls {
+            margin-top: 20px;
+            text-align: center;
+        }
+        
+        button {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 10px 30px;
+            border-radius: 25px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        button:hover {
+            background: #764ba2;
+            transform: translateY(-2px);
+        }
+        
+        .clear-btn {
+            background: #f44336;
+            margin-left: 10px;
+        }
+        
+        .clear-btn:hover {
+            background: #d32f2f;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔌 Real-time Web Scraping Monitor</h1>
+            <p>Live data from WebSocket scraper</p>
+            <div class="status" id="status">Disconnected</div>
+        </div>
+        
+        <div class="stats">
+            <div class="stat-card">
+                <h3>Total Data</h3>
+                <div class="number" id="totalData">0</div>
+            </div>
+            <div class="stat-card">
+                <h3>Books</h3>
+                <div class="number" id="bookCount">0</div>
+            </div>
+            <div class="stat-card">
+                <h3>Quotes</h3>
+                <div class="number" id="quoteCount">0</div>
+            </div>
+            <div class="stat-card">
+                <h3>Countries</h3>
+                <div class="number" id="countryCount">0</div>
+            </div>
+        </div>
+        
+        <div class="data-container">
+            <h2>📡 Live Data Stream</h2>
+            <div id="dataList">
+                <p style="color: #999; text-align: center;">Menunggu data dari scraper...</p>
+            </div>
+        </div>
+        
+        <div class="controls">
+            <button onclick="clearData()">🗑️ Clear Data</button>
+            <button onclick="reconnect()">🔄 Reconnect</button>
+        </div>
+    </div>
+    
+    <script>
+        let ws = null;
+        let dataHistory = [];
+        
+        function connect() {
+            ws = new WebSocket('ws://localhost:8765');
+            
+            ws.onopen = function() {
+                console.log('Connected to WebSocket');
+                document.getElementById('status').textContent = 'Connected';
+                document.getElementById('status').className = 'status connected';
+                addSystemMessage('✅ Connected to WebSocket server');
+            };
+            
+            ws.onmessage = function(event) {
+                const data = JSON.parse(event.data);
+                console.log('Received:', data);
+                
+                if (data.type === 'start') {
+                    addSystemMessage(`🚀 ${data.message}`);
+                } else if (data.type === 'complete') {
+                    addSystemMessage(`✨ ${data.message} (Total: ${data.total_data} items)`);
+                } else if (data.type === 'pong') {
+                    // Ignore pong messages
+                } else {
+                    addDataItem(data);
+                }
+            };
+            
+            ws.onerror = function(error) {
+                console.error('WebSocket error:', error);
+                addSystemMessage('❌ WebSocket error occurred');
+            };
+            
+            ws.onclose = function() {
+                console.log('Disconnected from WebSocket');
+                document.getElementById('status').textContent = 'Disconnected';
+                document.getElementById('status').className = 'status disconnected';
+                addSystemMessage('🔌 Disconnected from WebSocket server');
+            };
+        }
+        
+        function addSystemMessage(message) {
+            const dataList = document.getElementById('dataList');
+            const item = document.createElement('div');
+            item.className = 'data-item start';
+            item.innerHTML = `
+                <div class="timestamp">${new Date().toLocaleTimeString()}</div>
+                <div class="data-content">${message}</div>
+            `;
+            dataList.insertBefore(item, dataList.firstChild);
+        }
+        
+        function addDataItem(data) {
+            dataHistory.unshift(data);
+            updateStats();
+            
+            const dataList = document.getElementById('dataList');
+            const item = document.createElement('div');
+            
+            let content = '';
+            if (data.type === 'book') {
+                content = `
+                    <strong>📚 Book #${data.no}</strong><br>
+                    ${data.judul}<br>
+                    💰 ${data.harga} | ⭐ ${data.rating}
+                `;
+                item.className = 'data-item book';
+            } else if (data.type === 'quote') {
+                content = `
+                    <strong>💬 Quote #${data.no}</strong><br>
+                    "${data.kutipan}"<br>
+                    ✍️ ${data.penulis} | 🏷️ ${data.tags}
+                `;
+                item.className = 'data-item quote';
+            } else if (data.type === 'country') {
+                content = `
+                    <strong>🌏 Country #${data.no}</strong><br>
+                    ${data.negara}<br>
+                    🏙️ Capital: ${data.ibu_kota}
+                `;
+                item.className = 'data-item country';
+            } else {
+                return;
+            }
+            
+            item.innerHTML = `
+                <div class="timestamp">${new Date(data.timestamp).toLocaleTimeString()}</div>
+                <div class="data-content">${content}</div>
+            `;
+            
+            dataList.insertBefore(item, dataList.firstChild);
+            
+            // Limit history to 100 items
+            while (dataList.children.length > 100) {
+                dataList.removeChild(dataList.lastChild);
+            }
+        }
+        
+        function updateStats() {
+            const total = dataHistory.length;
+            const books = dataHistory.filter(d => d.type === 'book').length;
+            const quotes = dataHistory.filter(d => d.type === 'quote').length;
+            const countries = dataHistory.filter(d => d.type === 'country').length;
+            
+            document.getElementById('totalData').textContent = total;
+            document.getElementById('bookCount').textContent = books;
+            document.getElementById('quoteCount').textContent = quotes;
+            document.getElementById('countryCount').textContent = countries;
+        }
+        
+        function clearData() {
+            dataHistory = [];
+            document.getElementById('dataList').innerHTML = '<p style="color: #999; text-align: center;">Data cleared. Waiting for new data...</p>';
+            updateStats();
+            addSystemMessage('🗑️ Data history cleared');
+        }
+        
+        function reconnect() {
+            if (ws) {
+                ws.close();
+            }
+            setTimeout(() => {
+                connect();
+            }, 500);
+        }
+        
+        // Connect on page load
+        connect();
+    </script>
+</body>
+</html>
